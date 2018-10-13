@@ -1,0 +1,184 @@
+#include<avr/io.h>
+#include<avr/interrupt.h>
+#include<util/delay.h>
+
+#define E   PC5
+#define RS   PC4
+
+
+volatile int x=0,i=0,k=0,j=0;
+unsigned int temp=0,motion_s=1,alarm=0;
+
+char card1[]="991510210611";
+char card[];
+char msg1[]="Please press your card!";
+char msg2[]="Access Granted!";
+char msg3[]="Card not valid!";
+char msg4[]="Welcome";
+
+void lcd_command(unsigned char cmd)
+{
+	
+  	char K1;			//data is in Temp Register
+  	K1=cmd;
+  	K1=(K1 & 0xF0);
+  	K1=K1 >> 4;  		//Send MSB
+  
+  	PORTC &= 0xF0; 
+  	PORTC |= (K1 & 0x0F); 
+ 	PORTC |= 1<<E;			//en=1
+  	_delay_ms(1); 			//delay
+ 	PORTC &= ~(1<<E);		//en=0
+ 	_delay_ms(1); 			//delay
+
+  	K1=cmd;
+  	K1=(K1 & 0x0F);  		//Send LSB
+    PORTC &= 0xF0;  
+  	PORTC |= K1;
+ 	PORTC |= 1<<E;			//en=1
+  	_delay_ms(1); 			//delay
+ 	PORTC &= ~(1<<E);		//en=0
+ 	_delay_ms(1); 			//delay
+
+
+}
+
+
+void lcd_data(unsigned char da)
+{
+
+	char K1;		//data is in Temp Register
+  	K1=da;
+  	K1=K1 & 0xF0;
+  	K1=K1 >> 4;  //Send MSB
+  
+  	PORTC &= 0xF0; 
+  	PORTC |= (K1 & 0x0F); 
+ 	PORTC |= 1<<E;
+	PORTC |= 1<<RS;		//en=1,rs=1
+  	_delay_ms(1); 		//delay 
+ 	PORTC &= ~(1<<E);	//en=0,rs=1
+ 	_delay_ms(1); 		//delay
+
+  	K1=da;
+  	K1=(K1 & 0x0F);  		//Send LSB
+    PORTC &= 0xF0;  
+  	PORTC |= K1;
+ 	PORTC |= 1<<E;
+	PORTC |= 1<<RS;		//en=1,rs=1
+  	_delay_ms(1); 		//delay
+ 	PORTC &= ~(1<<E);	//en=0,rs=1
+ 	_delay_ms(1); 		//delay
+
+
+}
+
+
+void lcd_init()
+{
+	lcd_command(0x02);
+	lcd_command(0x60);
+	lcd_command(0x28);
+	lcd_command(0x0C);
+}
+
+void lcd_string(unsigned char a[])
+{
+	while(a[i]!='\0')
+	{
+		lcd_data(a[i]);
+		i++;
+	}
+}
+
+
+void usart_init()	//Uart initialisation transmission and recieving
+{
+	UBRRL=51;
+	UCSRB=UCSRB|(1<<RXEN)|(1<<TXEN);
+	UCSRC=UCSRC|(1<<URSEL)|(1<<UCSZ1)|(1<<UCSZ0);
+}
+
+void getcard_id(void)	//Function to get 12 byte ID no. from rfid card
+{	
+	for(i=0;i<12;i++) 
+	{
+		card[i]= usart_getch();	// receive card value byte by byte
+	}
+}
+
+int usart_getch()
+{
+	while ((UCSRA & (1 << RXC)) == 0); // Do nothing until data has been received and is ready to be read from UDR
+	return(UDR); // return the byte
+}
+
+void pir_home()
+{
+	if(PINC==0b00000001)
+	{
+		PORTC=0b00001100;
+
+	}
+}
+
+void pir_theft()
+{
+	if(PINC==0b00000001)
+	{
+		PORTC=0b00000010;
+
+		//gsm
+	}
+}
+
+
+int main(void)
+{
+	DDRB=0xff;		//LCD_DATA port as output port
+	DDRC |=(1<<0) | (1<<1) |(1<<2);		
+	lcd_init();		//initialization of LCD
+	_delay_ms(50);		// delay of 50 milliseconds
+	usart_init();		// initiailztion of USART
+	while(1)
+	{
+		lcd_string(msg4[]);	//Function to display string on LCD
+		getcard_id();	// Function to get RFID card no. from serial port
+		lcd_command(0xC0);	// to go in second line and zeroth position on LCD
+		lcd_string(card[]);		// a function to write RFID card no. on LCD
+		
+		for(j=0;j<12;j++)
+		{
+			if(card[j]==card1[j]) //comparing of card
+			{
+				k++;
+			}
+
+		}
+
+		if(k==12) //if k=12 card matched
+		{
+			lcd_string(msg2[]);
+			if(x==0) //entry
+			{
+				pir_home();		//home auto
+				//gsm				
+				x++;
+			}
+			else		//exit
+			{
+				pir_theft();		//alarm
+
+			}
+		}
+
+		else		//card does not match
+		{
+			//gsm
+		}
+	}
+	
+	return 0;
+}		
+	
+	
